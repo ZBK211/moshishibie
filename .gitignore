@@ -5,6 +5,7 @@ pretrain/
 output/
 inference/
 output_torch_crnn/
+output_torch_transformer/
 work_torch/
 *.zip
 *.tar

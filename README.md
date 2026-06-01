@@ -35,13 +35,13 @@ PY
 python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.device_count())"
 ```
 
-若输出 `True` 且 GPU 数量为 4，直接执行：
+若输出 `True` 且 GPU 数量为 4，直接执行。默认是四卡 `CNN + Transformer Encoder + CTC`，比 CRNN 更吃算力也更适合 H200：
 
 ```bash
 python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 bash run_download_data.sh
 bash run_torch_prepare.sh
-CUDA_VISIBLE_DEVICES=0,1,2,3 EPOCHS=120 BATCH_SIZE=128 IMAGE_W=640 bash nohup_torch_train.sh
+CUDA_VISIBLE_DEVICES=0,1,2,3 EPOCHS=120 BATCH_SIZE=128 IMAGE_W=640 MODEL=transformer bash nohup_torch_train.sh
 ```
 
 查看训练：
@@ -61,7 +61,7 @@ bash tail_latest_log.sh
 最终提交文件：
 
 ```text
-results/submission_torch_crnn.csv
+results/submission_torch_transformer.csv
 ```
 
 下面是 PaddleOCR 路线。只有当 Paddle GPU 环境已可用时再走。

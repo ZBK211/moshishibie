@@ -173,6 +173,52 @@ class CRNN(nn.Module):
         return out
 
 
+class TransformerOCR(nn.Module):
+    def __init__(self, num_classes, d_model=512, nhead=8, num_layers=8, dim_feedforward=2048, max_seq_len=256):
+        super().__init__()
+        self.cnn = nn.Sequential(
+            nn.Conv2d(1, 64, 3, 1, 1), nn.BatchNorm2d(64), nn.GELU(), nn.MaxPool2d(2, 2),
+            nn.Conv2d(64, 128, 3, 1, 1), nn.BatchNorm2d(128), nn.GELU(), nn.MaxPool2d(2, 2),
+            nn.Conv2d(128, 256, 3, 1, 1), nn.BatchNorm2d(256), nn.GELU(),
+            nn.Conv2d(256, 256, 3, 1, 1), nn.BatchNorm2d(256), nn.GELU(), nn.MaxPool2d((2, 1), (2, 1)),
+            nn.Conv2d(256, d_model, 3, 1, 1), nn.BatchNorm2d(d_model), nn.GELU(),
+            nn.Conv2d(d_model, d_model, 3, 1, 1), nn.BatchNorm2d(d_model), nn.GELU(), nn.MaxPool2d((2, 1), (2, 1)),
+            nn.Conv2d(d_model, d_model, 2, 1, 0), nn.BatchNorm2d(d_model), nn.GELU(),
+        )
+        enc_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=0.1,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True,
+        )
+        self.pos = nn.Parameter(torch.zeros(1, max_seq_len, d_model))
+        self.encoder = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
+        self.norm = nn.LayerNorm(d_model)
+        self.fc = nn.Linear(d_model, num_classes)
+        nn.init.trunc_normal_(self.pos, std=0.02)
+
+    def forward(self, x):
+        feat = self.cnn(x)
+        feat = feat.mean(dim=2).permute(0, 2, 1)
+        if feat.size(1) > self.pos.size(1):
+            raise RuntimeError(f"Sequence length {feat.size(1)} exceeds positional table {self.pos.size(1)}")
+        feat = feat + self.pos[:, :feat.size(1), :]
+        feat = self.encoder(feat)
+        return self.fc(self.norm(feat))
+
+
+def build_model(name, num_classes, image_w):
+    if name == "crnn":
+        return CRNN(num_classes)
+    if name == "transformer":
+        max_seq_len = max(256, image_w // 2)
+        return TransformerOCR(num_classes, max_seq_len=max_seq_len)
+    raise ValueError(f"Unknown model: {name}")
+
+
 def ctc_decode(logits, inv_vocab):
     pred = logits.argmax(-1).cpu().numpy()
     out = []
@@ -225,12 +271,13 @@ def train(args):
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, sampler=val_sampler,
                             num_workers=args.workers, pin_memory=True, collate_fn=collate)
 
-    model = CRNN(len(vocab)).to(device)
+    model = build_model(args.model, len(vocab), args.image_w).to(device)
     if distributed:
         model = DDP(model, device_ids=[local_rank])
     criterion = nn.CTCLoss(blank=0, zero_infinity=True)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
+    scaler = torch.cuda.amp.GradScaler(enabled=args.amp and device.type == "cuda")
     out_dir = Path(args.output_dir)
     if rank == 0:
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -246,14 +293,17 @@ def train(args):
             xs = xs.to(device, non_blocking=True)
             ys = ys.to(device, non_blocking=True)
             y_lengths = y_lengths.to(device, non_blocking=True)
-            logits = model(xs)
-            log_probs = F.log_softmax(logits, -1).permute(1, 0, 2)
-            input_lengths = torch.full((xs.size(0),), logits.size(1), dtype=torch.long, device=device)
-            loss = criterion(log_probs, ys, input_lengths, y_lengths)
+            with torch.cuda.amp.autocast(enabled=args.amp and device.type == "cuda"):
+                logits = model(xs)
+                log_probs = F.log_softmax(logits.float(), -1).permute(1, 0, 2)
+                input_lengths = torch.full((xs.size(0),), logits.size(1), dtype=torch.long, device=device)
+                loss = criterion(log_probs, ys, input_lengths, y_lengths)
             opt.zero_grad(set_to_none=True)
-            loss.backward()
+            scaler.scale(loss).backward()
+            scaler.unscale_(opt)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
-            opt.step()
+            scaler.step(opt)
+            scaler.update()
             total_loss += float(loss.item())
             iterator.set_postfix(loss=f"{loss.item():.4f}")
         sched.step()
@@ -264,6 +314,7 @@ def train(args):
                 "model": (model.module if distributed else model).state_dict(),
                 "vocab": vocab,
                 "args": vars(args),
+                "model_name": args.model,
                 "val_exact": acc,
                 "epoch": epoch,
             }
@@ -280,7 +331,8 @@ def predict(args):
     ckpt = torch.load(args.checkpoint, map_location="cpu")
     vocab = ckpt["vocab"]
     inv_vocab = {v: k for k, v in vocab.items()}
-    model = CRNN(len(vocab))
+    model_name = ckpt.get("model_name", ckpt.get("args", {}).get("model", "crnn"))
+    model = build_model(model_name, len(vocab), args.image_w)
     model.load_state_dict(ckpt["model"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device).eval()
@@ -318,6 +370,8 @@ def main():
     tr.add_argument("--lr", type=float, default=1e-3)
     tr.add_argument("--image-h", type=int, default=48)
     tr.add_argument("--image-w", type=int, default=640)
+    tr.add_argument("--model", default="transformer", choices=["transformer", "crnn"])
+    tr.add_argument("--amp", action="store_true", default=True)
     tr.set_defaults(func=train)
     pr = sub.add_parser("predict")
     pr.add_argument("--checkpoint", default="output_torch_crnn/best.pt")
