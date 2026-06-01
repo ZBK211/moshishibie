@@ -4,6 +4,8 @@ PaddleOCR/
 pretrain/
 output/
 inference/
+output_torch_crnn/
+work_torch/
 *.zip
 *.tar
 *.tar.gz
