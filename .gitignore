@@ -1,0 +1,15 @@
+data/
+work/
+PaddleOCR/
+pretrain/
+output/
+inference/
+*.zip
+*.tar
+*.tar.gz
+*.pdparams
+*.pdopt
+*.states
+*.log
+__pycache__/
+.DS_Store
