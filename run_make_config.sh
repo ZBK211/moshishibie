@@ -27,6 +27,7 @@ python ../scripts/make_ppocr_config.py \
   --train-batch-size "${TRAIN_BATCH_SIZE:-256}" \
   --eval-batch-size "${EVAL_BATCH_SIZE:-256}" \
   --max-text-length 100 \
+  --image-width "${IMAGE_WIDTH:-640}" \
   --eval-step "${EVAL_STEP:-1000}"
 
 cd ..

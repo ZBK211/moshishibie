@@ -48,7 +48,7 @@ def main():
             r = by_name.get(path.name)
             text = "" if r is None else str(r.get("rec_text", ""))
             score = 0.0 if r is None else float(r.get("rec_score", 0.0))
-            rows.append({"new_name": path.name, "value": text or "无", "rec_score": score})
+            rows.append({"new_name": path.name, "value": text or " ", "rec_score": score})
             done.add(path.name)
         pd.DataFrame(rows).to_csv(score_path, index=False, encoding="utf-8")
 

@@ -20,6 +20,21 @@ def recursive_set(obj, key, value):
             recursive_set(v, key, value)
 
 
+def recursive_set_rec_image_width(obj, width):
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key in {"image_shape", "d2s_train_image_shape"} and isinstance(value, list) and len(value) == 3:
+                value[2] = width
+            else:
+                recursive_set_rec_image_width(value, width)
+    elif isinstance(obj, list):
+        if len(obj) == 2 and obj[0] == 320 and obj[1] in {32, 48, 64}:
+            obj[0] = width
+        else:
+            for value in obj:
+                recursive_set_rec_image_width(value, width)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-config", required=True)
@@ -31,6 +46,7 @@ def main():
     parser.add_argument("--train-batch-size", type=int, default=256)
     parser.add_argument("--eval-batch-size", type=int, default=256)
     parser.add_argument("--max-text-length", type=int, default=100)
+    parser.add_argument("--image-width", type=int, default=640)
     parser.add_argument("--eval-step", type=int, default=1000)
     args = parser.parse_args()
 
@@ -56,13 +72,16 @@ def main():
     if "Train" in cfg and "loader" in cfg["Train"]:
         cfg["Train"]["loader"]["batch_size_per_card"] = args.train_batch_size
         cfg["Train"]["loader"]["drop_last"] = True
-        cfg["Train"]["loader"]["num_workers"] = 8
+        cfg["Train"]["loader"]["num_workers"] = 0
+        cfg["Train"]["loader"]["use_shared_memory"] = False
     if "Eval" in cfg and "loader" in cfg["Eval"]:
         cfg["Eval"]["loader"]["batch_size_per_card"] = args.eval_batch_size
         cfg["Eval"]["loader"]["drop_last"] = False
-        cfg["Eval"]["loader"]["num_workers"] = 8
+        cfg["Eval"]["loader"]["num_workers"] = 0
+        cfg["Eval"]["loader"]["use_shared_memory"] = False
 
     recursive_set(cfg, "max_text_length", args.max_text_length)
+    recursive_set_rec_image_width(cfg, args.image_width)
 
     out = Path(args.output_config)
     out.parent.mkdir(parents=True, exist_ok=True)
