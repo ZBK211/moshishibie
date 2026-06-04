@@ -21,13 +21,14 @@ python ../scripts/make_ppocr_config.py \
   --base-config "$BASE_CONFIG" \
   --output-config configs/rec/aistudio_ppocrv5_server_rec.yml \
   --train-data-dir ./train_data \
-  --save-model-dir ./output/aistudio_ppocrv5_server \
-  --pretrained-model ./pretrain/PP-OCRv5_server_rec_pretrained.pdparams \
+  --save-model-dir "${SAVE_MODEL_DIR:-./output/aistudio_ppocrv5_server}" \
+  --pretrained-model "${PRETRAINED_MODEL:-./pretrain/PP-OCRv5_server_rec_pretrained.pdparams}" \
   --epochs "${EPOCHS:-80}" \
   --train-batch-size "${TRAIN_BATCH_SIZE:-256}" \
   --eval-batch-size "${EVAL_BATCH_SIZE:-256}" \
   --max-text-length 100 \
   --image-width "${IMAGE_WIDTH:-640}" \
+  --learning-rate "${LEARNING_RATE:-0.0005}" \
   --eval-step "${EVAL_STEP:-1000}"
 
 cd ..

@@ -47,6 +47,7 @@ def main():
     parser.add_argument("--eval-batch-size", type=int, default=256)
     parser.add_argument("--max-text-length", type=int, default=100)
     parser.add_argument("--image-width", type=int, default=640)
+    parser.add_argument("--learning-rate", type=float)
     parser.add_argument("--eval-step", type=int, default=1000)
     args = parser.parse_args()
 
@@ -82,6 +83,8 @@ def main():
 
     recursive_set(cfg, "max_text_length", args.max_text_length)
     recursive_set_rec_image_width(cfg, args.image_width)
+    if args.learning_rate is not None:
+        cfg.setdefault("Optimizer", {}).setdefault("lr", {})["learning_rate"] = args.learning_rate
 
     out = Path(args.output_config)
     out.parent.mkdir(parents=True, exist_ok=True)
