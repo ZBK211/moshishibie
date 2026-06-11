@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-python scripts/prepare_data.py --package-root . --work-dir work --val-ratio 0.05
+python scripts/prepare_data.py --package-root . --work-dir work --val-ratio "${VAL_RATIO:-0.05}"
 
 ln -sfn "$(pwd)/work/train_data" PaddleOCR/train_data
 

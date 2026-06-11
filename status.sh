@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "== processes =="
-for name in train infer torch_train torch_infer; do
+for name in train infer train_strong infer_strong torch_train torch_infer; do
   pid_file="logs/${name}.pid"
   if [ -f "$pid_file" ]; then
     pid="$(cat "$pid_file")"

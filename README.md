@@ -118,6 +118,62 @@ results/recognition_scores_finetuned.csv
 results/h200_result_ppocrv5_server.tar.gz
 ```
 
+## PaddleOCR stronger two-stage route
+
+Use this route when you have four H200 cards and want to push the competition score higher than the one-stage run.
+It trains PP-OCRv5 server recognition in two stages:
+
+- stage 1: width 640, normal learning rate, broad convergence
+- stage 2: width 960, lower learning rate, continue from stage 1 best checkpoint for longer text and narrow signs
+
+Run on the server:
+
+```bash
+source /inspire/hdd/project/generate-content-identifier/czxs253130383/miniconda3/etc/profile.d/conda.sh
+conda activate ocr_paddle
+cd /inspire/hdd/project/generate-content-identifier/czxs253130383/WaterMoE-main/moshishibie
+git pull
+
+bash run_download_data.sh
+VAL_RATIO=0.03 bash run_prepare_data.sh
+bash run_make_config_strong.sh
+
+CUDA_VISIBLE_DEVICES=0,1,2,3 bash nohup_train_strong.sh
+bash status.sh
+bash tail_latest_log.sh
+```
+
+After training finishes:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 bash nohup_infer_strong.sh
+bash tail_latest_log.sh
+```
+
+Main strong output:
+
+```text
+results/submission_aistudio_ppocrv5_server_s2.csv
+results/recognition_scores_aistudio_ppocrv5_server_s2.csv
+results/h200_result_aistudio_ppocrv5_server_s2.tar.gz
+```
+
+If you also have a teacher/LLM OCR file, for example `submission_siliconflow_qwen32_all_available_latest.txt`,
+copy it to the server project and fuse it with the strong PaddleOCR output:
+
+```bash
+TEACHER_SUBMISSION=./submission_siliconflow_qwen32_all_available_latest.txt \
+CUDA_VISIBLE_DEVICES=0 bash nohup_infer_strong.sh
+```
+
+Fused tab-separated output:
+
+```text
+results/submission_aistudio_ppocrv5_server_s2_teacher_fused.txt
+```
+
+This fused file keeps exactly `new_name<TAB>value` format and 10,000 test rows.
+
 If small result files can be pushed through git:
 
 ```bash
